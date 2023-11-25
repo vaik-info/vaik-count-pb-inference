@@ -15,11 +15,11 @@ class PbModel:
         self.model_output_cam_dtype = self.model.signatures["serving_default"].outputs[1].dtype
         self.classes = classes
 
-    def inference(self, input_image_list: List[np.ndarray], batch_size: int = 8) -> Tuple[List[Dict], Dict]:
-        resized_image_array = self.__preprocess_image_list(input_image_list, self.model_input_shape[1:3])
+    def inference(self, input_image_list: List[np.ndarray], batch_size: int = 8) -> Tuple[List[Dict], Tuple]:
+        resized_image_array, resize_image_shape_list, input_image_shape_list = self.__preprocess_image_list(input_image_list, self.model_input_shape[1:3])
         output_count_tensor, output_cam_tensor = self.__inference(resized_image_array, batch_size)
-        output = self.__output_parse(output_count_tensor, output_cam_tensor)
-        return output, output_count_tensor, output_cam_tensor
+        output = self.__output_parse(output_count_tensor, output_cam_tensor, resize_image_shape_list, input_image_shape_list)
+        return output, (output_count_tensor, output_cam_tensor)
 
     def __inference(self, resize_input_tensor: np.ndarray, batch_size: int) -> np.ndarray:
         if len(resize_input_tensor.shape) != 4:
@@ -42,11 +42,13 @@ class PbModel:
 
     def __preprocess_image_list(self, input_image_list: List[np.ndarray],
                                 resize_input_shape: Tuple[int, int]) -> np.ndarray:
-        resized_image_list = []
+        resized_image_list, resize_image_shape_list, input_image_shape_list = [], [], []
         for input_image in input_image_list:
-            resized_image = self.__preprocess_image(input_image, resize_input_shape)
+            resized_image, resize_image_shape, input_image_shape = self.__preprocess_image(input_image, resize_input_shape)
             resized_image_list.append(resized_image)
-        return np.stack(resized_image_list)
+            resize_image_shape_list.append(resize_image_shape)
+            input_image_shape_list.append(input_image_shape)
+        return np.stack(resized_image_list), resize_image_shape_list, input_image_shape_list
 
     def __preprocess_image(self, input_image: np.ndarray, resize_input_shape: Tuple[int, int]) -> Tuple[
         np.ndarray, Tuple[float, float]]:
@@ -66,17 +68,23 @@ class PbModel:
         resize_pil_image = pil_image.resize(resize_size)
         resize_image = np.array(resize_pil_image)
         output_image[:resize_image.shape[0], :resize_image.shape[1], :] = resize_image
-        return output_image
+        return output_image, resize_image.shape, input_image.shape
 
-    def __output_parse(self, output_count_tensor: np.ndarray, output_cam_tensor: np.ndarray) -> List[Dict]:
-        for cam in output_cam_tensor:
-            zero = cam[:, :, 0]
-            one = cam[:, :, 1]
-            two = cam[:, :, 2]
-            print()
+    def __output_parse(self, output_count_tensor: np.ndarray, output_cam_tensor: np.ndarray, resize_image_shape_list, input_image_shape_list) -> List[Dict]:
         output_dict_list = []
         for index in range(output_count_tensor.shape[0]):
-            output_dict = {'score': [((1.0 - abs(round(count)-count))/2) / 0.5 for count in pred[index].tolist()],
-                           'count': [round(count) for count in pred[index].tolist()]}
+            resize_cam_canvas = np.zeros(input_image_shape_list[index], dtype=np.float32)
+            for cam_index in range(output_cam_tensor.shape[-1]):
+                org_cam_sum = np.sum(output_cam_tensor[index, :, :, cam_index])
+                cam_input_image = Image.fromarray(output_cam_tensor[index, :, :, cam_index]).resize((self.model_input_shape[2], self.model_input_shape[1]), resample=Image.BICUBIC)
+                crop_cam_image = cam_input_image.crop((0, 0, resize_image_shape_list[index][1], resize_image_shape_list[index][0]))
+                resize_crop_cam_image = np.asarray(crop_cam_image.resize((input_image_shape_list[index][1], input_image_shape_list[index][0])))
+                resize_crop_cam_image = np.clip(resize_crop_cam_image, 0, np.max(resize_crop_cam_image))
+                if org_cam_sum != 0:
+                    resize_crop_cam_image *= org_cam_sum / np.sum(resize_crop_cam_image)
+                resize_cam_canvas[:, :, cam_index] = resize_crop_cam_image
+            output_dict = {'score': [round(((1.0 - abs(round(count)-count))/2) / 0.5, 4) for count in output_count_tensor[index].tolist()],
+                           'count': [round(count) for count in output_count_tensor[index].tolist()],
+                           'cam': resize_cam_canvas}
             output_dict_list.append(output_dict)
         return output_dict_list
