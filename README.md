@@ -1,5 +1,16 @@
 # vaik-count-pb-inference
 
+Inference by count PB model
+
+## Install
+
+```shell
+pip install git+https://github.com/vaik-info/vaik-count-pb-inference.git
+```
+
+## Usage
+### Example
+
 ```python
 import os
 import numpy as np
@@ -14,4 +25,23 @@ image1 = np.asarray(
 classes = ('zero', 'one', 'two')
 model = PbModel(input_saved_model_dir_path, classes)
 output, raw_pred = model.inference([image1], batch_size=1)
+```
+
+## Output
+
+- output
+```
+[{'score': [0.8042, 0.8184, 0.9538], 'count': [4, 2, 1], 'cam': array([[[0.0000000e+00, 0.0000000e+00, 0.0000000e+00],
+        [0.0000000e+00, 0.0000000e+00, 0.0000000e+00],
+        ・・・], dtype=float32)},
+        ・・・]
+```
+
+- raw_pred
+
+```
+(array([[0.9881473 , 0.        , 1.9089862 ],
+       ・・・], dtype=float32), array([[[[0.        , 0.        , 0.        ],
+         [0.        , 0.        , 0.1        ],
+        ...,], dtype=float32))
 ```
