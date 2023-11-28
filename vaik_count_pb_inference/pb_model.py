@@ -83,8 +83,7 @@ class PbModel:
                 if org_cam_sum != 0:
                     resize_crop_cam_image *= org_cam_sum / np.sum(resize_crop_cam_image)
                 resize_cam_canvas[:, :, cam_index] = resize_crop_cam_image
-            output_dict = {'score': [round(((1.0 - abs(round(count)-count))/2) / 0.5, 4) for count in output_count_tensor[index].tolist()],
-                           'count': [round(count) for count in output_count_tensor[index].tolist()],
+            output_dict = {'count': [count for count in output_count_tensor[index].tolist()],
                            'cam': resize_cam_canvas}
             output_dict_list.append(output_dict)
         return output_dict_list
