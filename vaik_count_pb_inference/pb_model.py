@@ -133,7 +133,7 @@ class PbModel:
             heatmap = last_conv_layer_output @ pooled_grads[..., tf.newaxis]
             heatmap = tf.squeeze(heatmap)
 
-            heatmap = tf.maximum(heatmap, 0) / tf.math.reduce_max(heatmap)
+            heatmap = tf.maximum(heatmap, 0) / (tf.math.reduce_max(heatmap) + 1e-10)
             cam_list.append(heatmap.numpy())
         del tape
         return cam_list
@@ -146,5 +146,7 @@ class PbModel:
         resize_crop_image = np.asarray(crop_image.resize((resize_width, resize_height)))
         resize_crop_image = resize_crop_image - np.min(resize_crop_image)
         resize_crop_image = np.clip(resize_crop_image, 0, np.max(resize_crop_image))
+        if np.all(resize_crop_image == 0.0):
+            return np.zeros((resize_height, resize_width), dtype=np.float32)
         resize_crop_image = resize_crop_image * (total_num/np.sum(resize_crop_image))
         return resize_crop_image
